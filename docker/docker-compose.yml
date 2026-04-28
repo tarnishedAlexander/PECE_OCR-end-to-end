@@ -1,0 +1,46 @@
+services:
+  ocr:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BASE_IMAGE: "nvcr.io/nvidia/cuda:12.8.1-cudnn-devel-ubuntu24.04"
+
+    volumes:
+      - ../:/workspace/
+      - ~/.ssh:/home/ubuntu/.ssh:rio
+      # X11 forwarding
+      - ~/.Xauthority:/root/.Xauthority:rw
+      - /tmp/.X11-unix:/tmp/.X11-unix:rw
+
+    working_dir: /workspace
+
+    # Ask Docker to give this container access to all GPUs
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [ gpu ]
+
+    # Keep the container running in interactive mode
+    stdin_open: true
+    tty: true
+
+    # Add admin previledge so it works with Nsight system etc.
+    cap_add:
+      - SYS_ADMIN
+    privileged: true
+
+    # Extra environment variables for CUDA or Python:
+    environment:
+      - NVIDIA_DRIVER_CAPABILITIES=all
+      - NVIDIA_VISIBLE_DEVICES=all
+      - PYTHONUNBUFFERED=1
+      - DISPLAY=${DISPLAY}
+
+    ports:
+      - "8889:8888"
+      - "7861:7860"
+      - "7862:7861"

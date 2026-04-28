@@ -1,0 +1,9 @@
+albumentations
+ipykernel
+jupyterlab
+matplotlib
+numpy
+opencv-python
+paddleocr
+paddlepaddle
+pillow
