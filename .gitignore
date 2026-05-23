@@ -2,3 +2,4 @@
 .vnenv
 datasets
 output
+*.csv
