@@ -21,7 +21,7 @@ import numpy as np
 import pytesseract
 from pathlib import Path
 
-# Local import – must run from  end-to-end/  or have it on sys.path
+# Local import – must run from the workspace root or have it on sys.path
 from src.data.preprocessing import crop_to_border
 
 # ── Field definitions ─────────────────────────────────────────────────────────

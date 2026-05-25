@@ -3,7 +3,7 @@
 A compact end-to-end pipeline for preprocessing and OCR of exam answer sheets (letter-by-letter name grid + OMR bubble zone).
 
 ## What this repository contains
-- Notebook: `end-to-end/exam_answer_sheet_ocr.ipynb` — interactive pipeline that loads images from `datasets/`, preprocesses them, applies light augmentation, runs OCR, and extracts grid cells.
+- Notebook: `PECE2.ipynb` — interactive pipeline shell that loads images from `datasets/`, preprocesses them, and shows the current OCR/CNN flow.
 - Docker setup: `docker/docker-compose.yml` + `docker/Dockerfile` for running the environment in a container.
 - Python requirements: `requirements.txt` (listed below).
 
@@ -57,6 +57,6 @@ The project dependencies are provided in `requirements.txt` (top-level). Install
 - `scripts/match_names.py`: match extracted text against the reference CSV and write the report CSV/TXT.
 
 ## Notebook status
-- `end-to-end/PECE2.ipynb` is now a thin demo shell only.
-- The core OCR/CNN logic lives in `end-to-end/src/`.
+- `PECE2.ipynb` is now a thin demo shell only.
+- The core OCR/CNN logic lives in `src/`.
 - The text-matching stage was extracted from the notebook into `scripts/match_names.py`.

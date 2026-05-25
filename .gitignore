@@ -5,8 +5,8 @@ output
 *.csv
 scripts/
 *.png
-end-to-end/datasets/
-end-to-end/src/results/
+datasets/
+src/results/
 diagnostics
 all_extracted_results.txt
 trash/
