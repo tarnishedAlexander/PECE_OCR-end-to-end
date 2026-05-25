@@ -1,3 +1,6 @@
+--extra-index-url https://download.pytorch.org/whl/nightly/cu128
+torch
+torchvision
 albumentations
 ipykernel
 jupyterlab
@@ -5,7 +8,8 @@ matplotlib
 numpy
 opencv-python
 paddleocr
-paddlepaddle
+paddlepaddle-gpu
 pillow
 transformers
 pypdfium2
+pytesseract

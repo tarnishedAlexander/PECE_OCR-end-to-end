@@ -50,3 +50,13 @@ The project dependencies are provided in `requirements.txt` (top-level). Install
   - Used `ocr_engine.predict(...)` and added robust parsing to support multiple PaddleOCR output shapes
   - Visualized detections and produced a `structured_results` list of dictionaries with `text`, `bbox`, and `confidence`
 - Grid handling kept: HoughLinesP-based detection of grid lines and cell cropping. The notebook still includes a fallback crop when detection is weak.
+
+## Current script flow
+- `scripts/process_single.py`: process one image end-to-end using the modular pipeline.
+- `scripts/run_qualitative_test.py`: run the pipeline on a sample image and save the overlay output.
+- `scripts/match_names.py`: match extracted text against the reference CSV and write the report CSV/TXT.
+
+## Notebook status
+- `end-to-end/PECE2.ipynb` is now a thin demo shell only.
+- The core OCR/CNN logic lives in `end-to-end/src/`.
+- The text-matching stage was extracted from the notebook into `scripts/match_names.py`.

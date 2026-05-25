@@ -262,7 +262,7 @@ def preprocess_image(input_image_bgr, target_width=1024, target_height=1448):
     }
 
 
-# ----- Notebook-compatible helpers (reduce_shadow, deskew, crop_cell, ink_density)
+# ----- Notebook-compatible helpers (reduce_shadow, deskew, crop_cell)
 def reduce_shadow(img: np.ndarray) -> np.ndarray:
     """Reduce large-scale shadows per-channel (useful for phone photos).
 
@@ -304,15 +304,6 @@ def crop_cell(img: np.ndarray, x: int, y: int, w: int, h: int, pad: int = 10) ->
     """Crop the inner region of a detected cell (used for OCR / classification)."""
     return img[max(0, y + pad): y + h - pad, max(0, x + pad): x + w - pad]
 
-
-def ink_density(bgr: np.ndarray) -> float:
-    """Fraction of pixels darker than 128 (proxy for ink density)."""
-    g = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
-    return float(np.sum(g < 128) / g.size)
-
-
-def is_filled(bgr: np.ndarray, threshold: float = 0.02) -> bool:
-    return ink_density(bgr) >= threshold
 
 
 def normalize_character_crop(

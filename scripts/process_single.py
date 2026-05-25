@@ -13,11 +13,14 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 if __name__ == '__main__':
-    if len(sys.argv) < 2:
-        print('Usage: python scripts/process_single.py <image_path>')
-        sys.exit(1)
+    import argparse
 
-    img_path = Path(sys.argv[1])
+    p = argparse.ArgumentParser(description='Process a single exam image')
+    p.add_argument('image', help='Path to the image')
+    p.add_argument('--policy', choices=['ocr', 'cnn', 'auto'], default='ocr', help='Label selection policy')
+    args = p.parse_args()
+
+    img_path = Path(args.image)
     if not img_path.exists():
         print('Image not found:', img_path)
         sys.exit(1)
@@ -27,5 +30,5 @@ if __name__ == '__main__':
     from src.utils.pipeline import process_exam
 
     img = load_image(img_path)
-    res = process_exam(img, img_name=img_path.stem, debug=False)
+    res = process_exam(img, img_name=img_path.stem, debug=False, policy=args.policy)
     print('Processed:', res['img_name'])

@@ -8,12 +8,14 @@ It also supports a local ImageFolder fallback for custom datasets.
 from __future__ import annotations
 
 import argparse
+import math
 import time
 from pathlib import Path
 from typing import Sequence
 
 import torch
 import torch.nn as nn
+from torch.utils.data import WeightedRandomSampler
 from torch.utils.data import DataLoader
 from torchvision import datasets, transforms
 from torchvision.transforms import functional as TF
@@ -80,6 +82,18 @@ class CanonicalEMNIST(torch.utils.data.Dataset):
         return image, target
 
 
+class DatasetSubset(torch.utils.data.Dataset):
+    def __init__(self, base_dataset, indices):
+        self.base_dataset = base_dataset
+        self.indices = list(indices)
+
+    def __len__(self):
+        return len(self.indices)
+
+    def __getitem__(self, index):
+        return self.base_dataset[self.indices[index]]
+
+
 def _build_emnist_datasets(data_dir: str, train: bool, download: bool = True):
     base = datasets.EMNIST(
         root=data_dir,
@@ -93,6 +107,23 @@ def _build_emnist_datasets(data_dir: str, train: bool, download: bool = True):
 
 def _build_imagefolder_dataset(data_dir: str):
     return datasets.ImageFolder(data_dir, transform=_build_base_transform(train=True))
+
+
+def _make_subset(dataset, limit: int | None):
+    if limit is None or limit >= len(dataset):
+        return dataset
+    return DatasetSubset(dataset, range(limit))
+
+
+def _make_weighted_sampler(dataset) -> WeightedRandomSampler | None:
+    if not hasattr(dataset, "samples"):
+        return None
+    labels = []
+    for _, target in dataset.samples:
+        labels.append(int(target))
+    counts = torch.bincount(torch.tensor(labels), minlength=max(labels) + 1)
+    weights = torch.tensor([1.0 / counts[label] for label in labels], dtype=torch.double)
+    return WeightedRandomSampler(weights, num_samples=len(weights), replacement=True)
 
 
 def get_transform():
@@ -114,6 +145,9 @@ def train(
     val_split: float = 0.1,
     max_train_samples: int | None = None,
     max_val_samples: int | None = None,
+    unfreeze_last_blocks: int = 3,
+    label_smoothing: float = 0.1,
+    patience: int = 3,
 ):
     device = torch.device(device or ("cuda" if torch.cuda.is_available() else "cpu"))
 
@@ -134,19 +168,35 @@ def train(
     else:
         raise ValueError(f"Unsupported dataset type: {dataset}")
 
-    if max_train_samples is not None:
-        train_ds = torch.utils.data.Subset(train_ds, range(min(max_train_samples, len(train_ds))))
-    if max_val_samples is not None:
-        val_ds = torch.utils.data.Subset(val_ds, range(min(max_val_samples, len(val_ds))))
+    train_ds = _make_subset(train_ds, max_train_samples)
+    val_ds = _make_subset(val_ds, max_val_samples)
 
-    train_loader = DataLoader(train_ds, batch_size=batch_size, shuffle=True, num_workers=2, pin_memory=True)
+    sampler = _make_weighted_sampler(train_ds) if dataset == "emnist" else None
+    train_loader = DataLoader(
+        train_ds,
+        batch_size=batch_size,
+        shuffle=sampler is None,
+        sampler=sampler,
+        num_workers=2,
+        pin_memory=True,
+    )
     val_loader = DataLoader(val_ds, batch_size=batch_size, shuffle=False, num_workers=2, pin_memory=True)
 
-    model = build_mobilenet_v2(num_classes=len(classes), pretrained=True, freeze_features=True)
+    model = build_mobilenet_v2(
+        num_classes=len(classes),
+        pretrained=True,
+        freeze_features=True,
+        unfreeze_last_blocks=unfreeze_last_blocks,
+    )
     model = model.to(device)
 
     optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, model.parameters()), lr=lr)
-    criterion = nn.CrossEntropyLoss()
+    criterion = nn.CrossEntropyLoss(label_smoothing=label_smoothing)
+    scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer, T_max=max(1, epochs))
+
+    best_val_acc = -math.inf
+    best_state = None
+    no_improve = 0
 
     for epoch in range(1, epochs + 1):
         model.train()
@@ -175,15 +225,31 @@ def train(
             f"Epoch {epoch}/{epochs} — loss={epoch_loss:.4f} acc={acc:.4f} "
             f"val_loss={val_loss:.4f} val_acc={val_acc:.4f} time={time.time()-t0:.1f}s"
         )
+        scheduler.step()
+
+        if val_acc > best_val_acc:
+            best_val_acc = val_acc
+            best_state = {k: v.detach().cpu().clone() for k, v in model.state_dict().items()}
+            no_improve = 0
+        else:
+            no_improve += 1
+            if no_improve >= patience:
+                print(f"Early stopping after {epoch} epochs (best val_acc={best_val_acc:.4f})")
+                break
 
     out_path = Path(out_path)
     out_path.parent.mkdir(parents=True, exist_ok=True)
+    if best_state is not None:
+        model.load_state_dict(best_state)
     torch.save(
         {
             "state_dict": model.state_dict(),
             "classes": list(classes),
             "dataset": dataset,
             "num_classes": len(classes),
+            "best_val_acc": None if best_val_acc == -math.inf else float(best_val_acc),
+            "unfreeze_last_blocks": unfreeze_last_blocks,
+            "label_smoothing": label_smoothing,
         },
         str(out_path),
     )
@@ -221,6 +287,9 @@ def _parse_args():
     p.add_argument("--val-split", type=float, default=0.1)
     p.add_argument("--max-train-samples", type=int, default=None)
     p.add_argument("--max-val-samples", type=int, default=None)
+    p.add_argument("--unfreeze-last-blocks", type=int, default=3)
+    p.add_argument("--label-smoothing", type=float, default=0.1)
+    p.add_argument("--patience", type=int, default=3)
     return p.parse_args()
 
 
@@ -237,4 +306,7 @@ if __name__ == "__main__":
         val_split=args.val_split,
         max_train_samples=args.max_train_samples,
         max_val_samples=args.max_val_samples,
+        unfreeze_last_blocks=args.unfreeze_last_blocks,
+        label_smoothing=args.label_smoothing,
+        patience=args.patience,
     )

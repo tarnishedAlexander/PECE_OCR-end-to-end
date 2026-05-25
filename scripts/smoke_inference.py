@@ -9,8 +9,14 @@ is wired correctly.
 from __future__ import annotations
 
 import argparse
+import sys
 from pathlib import Path
 from typing import Optional
+
+
+REPO_ROOT = Path(__file__).resolve().parents[1] / "end-to-end"
+if REPO_ROOT.exists() and str(REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(REPO_ROOT))
 
 import cv2
 try:
@@ -19,12 +25,15 @@ except Exception:  # pragma: no cover - environment may not have torch
     torch = None
 
 try:
-    from src.models.cnn import build_mobilenet_v2
+    import src.models.cnn as cnn_mod
+    build_mobilenet_v2 = cnn_mod.build_mobilenet_v2
 except Exception:  # pragma: no cover - allow script to run without model code available
     build_mobilenet_v2 = None
 
 try:
-    from src.models.inference import set_inference_context, classify_char
+    import src.models.inference as inference_mod
+    set_inference_context = inference_mod.set_inference_context
+    classify_char = inference_mod.classify_char
 except Exception:
     set_inference_context = None
     classify_char = None
@@ -35,8 +44,20 @@ def load_checkpoint(path: Path) -> Optional[dict]:
     if not path.exists():
         print(f"Checkpoint {path} not found")
         return None
-    data = torch.load(str(path), map_location=torch.device("cpu"))
-    return data
+    try:
+        data = torch.load(str(path), map_location=torch.device("cpu"), weights_only=False)
+        print(f"Loaded checkpoint: {path}")
+        return data
+    except TypeError:
+        # Older torch versions do not support `weights_only`.
+        try:
+            return torch.load(str(path), map_location=torch.device("cpu"))
+        except Exception as exc:
+            print(f"Failed to load checkpoint {path}: {exc}")
+            return None
+    except Exception as exc:
+        print(f"Failed to load checkpoint {path}: {exc}")
+        return None
 
 
 def main():
@@ -49,6 +70,14 @@ def main():
     checkpoint = None
     if args.model_path:
         checkpoint = load_checkpoint(Path(args.model_path))
+
+    print(
+        "import status:",
+        f"torch={torch is not None}",
+        f"cnn={build_mobilenet_v2 is not None}",
+        f"inference={set_inference_context is not None and classify_char is not None}",
+        f"checkpoint={checkpoint is not None}",
+    )
 
     if checkpoint is not None and build_mobilenet_v2 is not None and set_inference_context is not None:
         classes = checkpoint.get("classes")
@@ -65,7 +94,6 @@ def main():
     infer_func = classify_char
     if infer_func is None:
         import pytesseract
-        import numpy as np
 
         def classify_char_fallback(bgr):
             gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
